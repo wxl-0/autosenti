@@ -1,23 +1,28 @@
 """
 Autohome (汽车之家) review scraper service.
 
-Scrapes user reviews (口碑) from https://k.autohome.com.cn for a given car model.
+Calls the Autohome JSON API directly instead of parsing HTML,
+because the 口碑 pages are Next.js CSR apps that render via client-side JS.
 
-URL format (series-level 口碑 pages):
-  https://k.autohome.com.cn/{series_id}/index_{page}.html
+API endpoint (verified 2026-06-27 via network interception):
+  https://koubeiipv6.app.autohome.com.cn/pc/series/list
+  ?pm=3&seriesId={series_id}&pageIndex={page}&pageSize=20
+  &yearid=0&ge=0&seriesSummaryKey=0&order=0
 
-Selectors verified against live DOM (2026-06-27):
-  container : li.clearfix
-  text      : [class*="kb_msg"]
-  rating    : [class*="custom_rank"]  → "综合口碑评分\n4.57"
-  date      : [class*="timeline"]     → "2026-06-14 发表口碑"
+Response shape:
+  result.list[]
+    .contents[]          – [{structuredname: "满意"|"不满意", content: str}]
+    .feeling_summary     – one-line summary string
+    .scoreList[]         – [{name: "空间"|"续航"|..., value: "1"-"5"}]
+    .posttime            – "YYYY-MM-DD"
+    .averageScore        – float
+  result.pagecount       – total pages
+  result.rowcount        – total reviews
 """
 
-import re
 import time
 
 import httpx
-from bs4 import BeautifulSoup
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +36,11 @@ CAR_ID_MAP: dict[str, str] = {
     "深蓝S07": "6817",
 }
 
-URL_TEMPLATE = "https://k.autohome.com.cn/{series_id}/index_{page}.html"
+API_URL = (
+    "https://koubeiipv6.app.autohome.com.cn/pc/series/list"
+    "?pm=3&seriesId={series_id}&pageIndex={page}&pageSize=20"
+    "&yearid=0&ge=0&seriesSummaryKey=0&order=0"
+)
 
 HEADERS = {
     "User-Agent": (
@@ -40,54 +49,48 @@ HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "zh-CN,zh;q=0.9",
+    "Referer": "https://k.autohome.com.cn/",
 }
-
-_RATING_RE = re.compile(r"\d+\.\d+")
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _parse_page(html: str, brand: str, page_url: str) -> list[dict]:
-    """Parse a single review page and return a list of review dicts."""
-    soup = BeautifulSoup(html, "lxml")
-    reviews: list[dict] = []
+def _parse_item(item: dict, brand: str) -> dict | None:
+    """Convert a single API review object into our canonical review dict."""
+    contents = item.get("contents") or []
+    text_parts = []
+    for c in contents:
+        name = c.get("structuredname", "")
+        content = c.get("content", "").strip()
+        if content:
+            text_parts.append(f"[{name}] {content}" if name else content)
 
-    for item in soup.select("li.clearfix"):
-        text_el = item.select_one("[class*='kb_msg']")
-        if not text_el:
-            continue
-        text = text_el.get_text(strip=True)
-        if len(text) < 5:
-            continue
+    # Fall back to feeling_summary if contents is empty
+    if not text_parts:
+        summary = (item.get("feeling_summary") or "").strip()
+        if summary:
+            text_parts.append(summary)
 
-        score_el = item.select_one("[class*='custom_rank']")
+    text = " ".join(text_parts)
+    if len(text) < 5:
+        return None
+
+    avg_score = item.get("averageScore") or 0.0
+    try:
+        rating = float(avg_score)
+    except (TypeError, ValueError):
         rating = 0.0
-        if score_el:
-            m = _RATING_RE.search(score_el.get_text())
-            if m:
-                try:
-                    rating = float(m.group())
-                except ValueError:
-                    pass
 
-        date_el = item.select_one("[class*='timeline']")
-        date = ""
-        if date_el:
-            date = date_el.get_text(strip=True).replace("发表口碑", "").strip()
+    date = item.get("posttime", "")
 
-        reviews.append(
-            {
-                "text": text,
-                "rating": rating,
-                "date": date,
-                "url": page_url,
-                "brand": brand,
-            }
-        )
-
-    return reviews
+    return {
+        "text": text,
+        "rating": rating,
+        "date": date,
+        "brand": brand,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -99,24 +102,34 @@ def scrape_brand_reviews(
     series_id: str,
     max_pages: int = 3,
 ) -> list[dict]:
-    """Scrape up to *max_pages* pages of reviews for one brand/model.
+    """Fetch up to *max_pages* pages of reviews for one brand/model via API.
 
     Returns a list of review dicts:
-        {"text": str, "rating": float, "date": str, "url": str, "brand": str}
+        {"text": str, "rating": float, "date": str, "brand": str}
 
-    Stops early if a page returns non-200 or yields zero reviews.
+    Stops early if the API returns no items or indicates no more pages.
     """
+    assert series_id != "TBD", f"series_id for {brand!r} not configured"
+
     all_reviews: list[dict] = []
     for page in range(1, max_pages + 1):
-        url = URL_TEMPLATE.format(series_id=series_id, page=page)
+        url = API_URL.format(series_id=series_id, page=page)
         try:
             resp = httpx.get(url, headers=HEADERS, timeout=15, follow_redirects=True)
             if resp.status_code != 200:
                 break
-            page_reviews = _parse_page(resp.text, brand, url)
-            if not page_reviews:
+            data = resp.json()
+            result = data.get("result") or {}
+            items = result.get("list") or []
+            if not items:
                 break
-            all_reviews.extend(page_reviews)
+            for item in items:
+                parsed = _parse_item(item, brand)
+                if parsed:
+                    all_reviews.append(parsed)
+            page_count = result.get("pagecount", 0)
+            if page >= page_count:
+                break
             time.sleep(0.5)
         except Exception:
             break
@@ -128,14 +141,19 @@ def scrape_pages_for_brand(
     series_id: str,
     pages: list[int],
 ) -> list[dict]:
-    """Scrape an explicit list of page numbers (useful for ReAct top-up)."""
+    """Fetch an explicit list of page numbers (used for ReAct top-up)."""
     all_reviews: list[dict] = []
     for page in pages:
-        url = URL_TEMPLATE.format(series_id=series_id, page=page)
+        url = API_URL.format(series_id=series_id, page=page)
         try:
             resp = httpx.get(url, headers=HEADERS, timeout=15, follow_redirects=True)
             if resp.status_code == 200:
-                all_reviews.extend(_parse_page(resp.text, brand, url))
+                data = resp.json()
+                items = (data.get("result") or {}).get("list") or []
+                for item in items:
+                    parsed = _parse_item(item, brand)
+                    if parsed:
+                        all_reviews.append(parsed)
             time.sleep(0.5)
         except Exception:
             pass
@@ -146,7 +164,7 @@ def scrape_all_brands(
     brand_series_id_map: dict[str, str],
     max_pages: int = 3,
 ) -> dict[str, list[dict]]:
-    """Scrape reviews for every brand in *brand_series_id_map*.
+    """Fetch reviews for every brand in *brand_series_id_map*.
 
     Returns ``{brand: [review_dict, ...]}`` for each brand.
     """
