@@ -4,18 +4,17 @@ from app.services.scraper_service import scrape_brand_reviews, scrape_all_brands
 
 
 def make_mock_html(reviews: list[dict]) -> str:
+    """Build HTML that matches the live autohome DOM structure (li.clearfix)."""
     items = ""
     for r in reviews:
         items += f"""
-        <div class="koubei-list-wrapper">
-          <div class="koubei-item">
-            <div class="text-content">{r['text']}</div>
-            <div class="score">{r.get('rating', 4.5)}</div>
-            <div class="date">{r.get('date', '2024-01-01')}</div>
-          </div>
-        </div>
+        <li class="clearfix">
+          <div class="list_kb_msg__U76oD">{r['text']}</div>
+          <div class="list_custom_rank__4x4Iv">综合口碑评分\n{r.get('rating', 4.5)}</div>
+          <p class="list_timeline__1N6pP">{r.get('date', '2024-01-01')} 发表口碑</p>
+        </li>
         """
-    return f"<html><body>{items}</body></html>"
+    return f"<html><body><ul>{items}</ul></body></html>"
 
 
 @patch("app.services.scraper_service.httpx")
@@ -27,7 +26,7 @@ def test_scrape_brand_reviews_returns_list(mock_httpx):
     ])
     mock_httpx.get.return_value = mock_response
 
-    result = scrape_brand_reviews("零跑D19", "12345", max_pages=1)
+    result = scrape_brand_reviews("零跑D19", "8273", max_pages=1)
 
     assert isinstance(result, list)
     assert len(result) >= 1
@@ -35,6 +34,8 @@ def test_scrape_brand_reviews_returns_list(mock_httpx):
     assert "url" in result[0]
     assert "brand" in result[0]
     assert result[0]["brand"] == "零跑D19"
+    assert result[0]["rating"] == 4.5
+    assert result[0]["date"] == "2024-01-15"
 
 
 @patch("app.services.scraper_service.httpx")
@@ -54,6 +55,7 @@ def test_scrape_all_brands_returns_dict(mock_httpx):
 def test_car_id_map_structure():
     assert isinstance(CAR_ID_MAP, dict)
     assert len(CAR_ID_MAP) >= 4
-    for brand, car_id in CAR_ID_MAP.items():
+    for brand, series_id in CAR_ID_MAP.items():
         assert isinstance(brand, str)
-        assert isinstance(car_id, str)
+        assert isinstance(series_id, str)
+        assert series_id != "TBD", f"{brand} still has TBD series_id"

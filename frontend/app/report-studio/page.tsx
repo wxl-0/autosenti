@@ -7,7 +7,7 @@ export default function ReportStudioPage() {
   const [reports, setReports] = useState<any[]>([]);
   const [current, setCurrent] = useState<any>();
   const [targetBrand, setTargetBrand] = useState("零跑D19");
-  const [competitors, setCompetitors] = useState("理想L9,问界M7,深蓝S07");
+  const [competitors, setCompetitors] = useState("理想L9,蔚来ES6,深蓝S07");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
