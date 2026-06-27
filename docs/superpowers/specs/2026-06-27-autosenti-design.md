@@ -88,12 +88,13 @@ END
 数据源：汽车之家口碑区（服务端渲染，标准 HTTP + BeautifulSoup，无需浏览器自动化）
 
 ```python
+# 车型 ID 需从汽车之家对应车型口碑页 URL 中确认，格式如：
+# https://k.autohome.com.cn/spec/list_3788_0_0_1_0.html → car_id = 3788
 CAR_ID_MAP = {
-    "零跑D19": "3788",
-    "理想L9":  "3472",
-    "问界M7":  "3601",
-    "深蓝S07": "3699",
-    # 可扩展
+    "零跑D19": "TBD_verify",   # 上线前从实际 URL 核查
+    "理想L9":  "TBD_verify",
+    "问界M7":  "TBD_verify",
+    "深蓝S07": "TBD_verify",
 }
 URL_TEMPLATE = "https://k.autohome.com.cn/spec/list_{car_id}_0_0_{page}_0.html"
 ```
@@ -184,11 +185,13 @@ class AnalysisState(TypedDict, total=False):
 **第二轮（ReAct）：**
 ```python
 for dim in discovered_dimensions:
-    coverage = count_reviews_mentioning(dim, raw_reviews)
+    coverage = count_reviews_mentioning(dim, raw_reviews[target_brand])
     if coverage < 8:
-        extra = scrape_more(brand, keyword=dim, extra_pages=2)
-        raw_reviews[brand].extend(extra)
-        # 记录到 agent_step：追加了几条、原因是什么
+        # 按页码追加抓取（汽车之家口碑无关键词过滤接口）
+        # 追加第 4、5 页，本地再按维度关键词筛选
+        extra_pages = scrape_pages(target_brand, pages=[4, 5])
+        raw_reviews[target_brand].extend(extra_pages)
+        # 记录到 agent_step：哪个维度数据不足、追加了几条
 ```
 
 ### `gap_detector`
