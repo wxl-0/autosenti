@@ -47,6 +47,7 @@ def list_reports(db: Session = Depends(get_db)):
             "status": r.status,
             "user_task": r.user_task,
             "final_output": r.final_output,
+            "report_markdown": r.report_markdown,
             "created_at": str(r.created_at),
         }
         for r in runs

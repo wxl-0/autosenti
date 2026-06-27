@@ -51,3 +51,8 @@ def ensure_sqlite_columns() -> None:
             columns = {col["name"] for col in inspector.get_columns(table)}
             if "conversation_id" not in columns:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN conversation_id VARCHAR(80)"))
+        # agent_runs: report_markdown column added in AutoSenti
+        if "agent_runs" in inspector.get_table_names():
+            cols = {col["name"] for col in inspector.get_columns("agent_runs")}
+            if "report_markdown" not in cols:
+                conn.execute(text("ALTER TABLE agent_runs ADD COLUMN report_markdown TEXT"))

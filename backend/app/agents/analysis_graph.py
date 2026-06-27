@@ -199,6 +199,7 @@ async def run_analysis_workflow(
             out["step_summary"] = "Markdown 报告已生成"
         run.status = "success"
         run.final_output = final
+        run.report_markdown = md
         run.finished_at = datetime.utcnow()
         db.commit()
         return {**state, "report_markdown": md, "final_output": final}

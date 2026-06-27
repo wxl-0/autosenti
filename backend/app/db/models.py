@@ -177,6 +177,7 @@ class AgentRun(Base):
     user_task: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(40), default="running")
     final_output: Mapped[str | None] = mapped_column(Text)
+    report_markdown: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
 
