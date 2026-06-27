@@ -85,11 +85,23 @@ def _parse_item(item: dict, brand: str) -> dict | None:
 
     date = item.get("posttime", "")
 
+    score_list = item.get("scoreList") or []
+    scores: dict[str, int] = {}
+    for s in score_list:
+        name = s.get("name", "")
+        val = s.get("value")
+        if name and val:
+            try:
+                scores[name] = int(val)
+            except (ValueError, TypeError):
+                pass
+
     return {
         "text": text,
         "rating": rating,
         "date": date,
         "brand": brand,
+        "scores": scores,  # e.g. {"空间": 5, "续航": 4, "驾驶感受": 4, ...}
     }
 
 

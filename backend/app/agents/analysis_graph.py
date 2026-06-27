@@ -10,31 +10,40 @@ from app.services.observability_service import agent_step
 from app.services.scraper_service import scrape_all_brands, scrape_pages_for_brand, CAR_ID_MAP
 
 
+# 汽车之家 scoreList 标准维度（API 直接提供，无需 LLM 发现）
+STANDARD_DIMENSIONS = ["空间", "驾驶感受", "续航", "外观", "内饰", "性价比", "智能化"]
+
+
 def _count_dimension_mentions(dimension: str, reviews: list[dict]) -> int:
-    kw = dimension.replace("体验", "").replace("系统", "").replace("性能", "")
-    return sum(1 for r in reviews if kw in r.get("text", ""))
+    """统计有 scoreList 评分记录的条数（替代文本关键词匹配）。"""
+    return sum(1 for r in reviews if dimension in r.get("scores", {}))
 
 
 def _compute_dimension_scores(reviews_by_brand: dict, dimensions: list[str]) -> dict:
+    """基于 API scoreList 结构化评分计算各品牌×维度得分矩阵。
+
+    每条 review 的 scores 字段格式：{"空间": 5, "续航": 4, ...}（1-5 分）
+    pos: 评分 >= 4；neg: 评分 <= 2
+    """
     scores = {}
     for brand, reviews in reviews_by_brand.items():
         scores[brand] = {}
         for dim in dimensions:
-            kw = dim.replace("体验", "").replace("系统", "").replace("性能", "")
-            relevant = [r for r in reviews if kw in r.get("text", "")]
-            if not relevant:
-                scores[brand][dim] = {"pos_rate": 0, "neg_rate": 0, "count": 0, "top_quotes": []}
+            dim_scores = [r["scores"][dim] for r in reviews if dim in r.get("scores", {})]
+            if not dim_scores:
+                scores[brand][dim] = {"avg_score": 0, "pos_rate": 0, "neg_rate": 0, "count": 0, "top_quotes": []}
                 continue
-            pos_words = ["好", "棒", "满意", "宽敞", "流畅", "快", "稳定", "喜欢"]
-            neg_words = ["差", "卡", "慢", "差劲", "失望", "噪", "不好", "问题"]
-            pos = sum(1 for r in relevant if any(w in r["text"] for w in pos_words))
-            neg = sum(1 for r in relevant if any(w in r["text"] for w in neg_words))
-            total = len(relevant)
+            total = len(dim_scores)
+            pos = sum(1 for s in dim_scores if s >= 4)
+            neg = sum(1 for s in dim_scores if s <= 2)
+            avg = round(sum(dim_scores) / total, 2)
+            top_quotes = [r["text"][:100] for r in reviews if dim in r.get("scores", {})][:3]
             scores[brand][dim] = {
+                "avg_score": avg,
                 "pos_rate": round(pos / total, 2),
                 "neg_rate": round(neg / total, 2),
                 "count": total,
-                "top_quotes": [r["text"][:100] for r in relevant[:3]],
+                "top_quotes": top_quotes,
             }
     return scores
 
@@ -72,31 +81,21 @@ async def run_analysis_workflow(
 
     async def dimension_discoverer(state: AnalysisState) -> AnalysisState:
         raw = state["raw_reviews"]
-        # 取各品牌前 30 条送 LLM
-        sample_texts = []
-        for brand, reviews in raw.items():
-            for r in reviews[:30]:
-                sample_texts.append(f"[{brand}] {r['text'][:200]}")
+        # 使用 API scoreList 标准维度，无需 LLM 发现
+        dims = STANDARD_DIMENSIONS
 
-        with agent_step(db, run.id, "DimensionDiscoverer", "discover_dimensions", "llm") as out:
-            result = await call_llm(db, "dimension_discoverer", "dimension_discovery",
-                                    {"reviews": sample_texts}, run_id=run.id)
-            dims = result.get("dimensions", ["空间体验", "车机系统", "续航里程", "驾驶感受", "外观设计"])
-            out["step_summary"] = f"发现 {len(dims)} 个维度：{', '.join(dims)}"
-
-        # 局部 ReAct：维度覆盖不足时追加抓取
+        # ReAct：覆盖不足时追加抓取
         target_reviews = raw.get(target_brand, [])
         coverage = {dim: _count_dimension_mentions(dim, target_reviews) for dim in dims}
-        for dim, cnt in coverage.items():
-            if cnt < 8:
-                with agent_step(db, run.id, "DimensionDiscoverer", f"react_fetch_{dim}", "autohome_scraper") as out:
-                    extra = scrape_pages_for_brand(target_brand, brand_car_id_map[target_brand], pages=[4, 5])
-                    raw[target_brand] = raw.get(target_brand, []) + extra
-                    new_cnt = _count_dimension_mentions(dim, raw[target_brand])
-                    out["step_summary"] = f"维度「{dim}」覆盖不足（{cnt} 条），追加抓取第 4-5 页，新增 {len(extra)} 条，当前覆盖 {new_cnt} 条"
+        with agent_step(db, run.id, "DimensionDiscoverer", "check_coverage") as out:
+            low_dims = [d for d, c in coverage.items() if c < 8]
+            if low_dims:
+                extra = scrape_pages_for_brand(target_brand, brand_car_id_map[target_brand], pages=[4, 5])
+                raw[target_brand] = raw.get(target_brand, []) + extra
+                coverage = {dim: _count_dimension_mentions(dim, raw[target_brand]) for dim in dims}
+            out["step_summary"] = f"维度：{', '.join(dims)}；覆盖分布：{coverage}"
 
-        coverage_updated = {dim: _count_dimension_mentions(dim, raw[target_brand]) for dim in dims}
-        return {**state, "dimensions": dims, "dimension_coverage": coverage_updated, "raw_reviews": raw}
+        return {**state, "dimensions": dims, "dimension_coverage": coverage, "raw_reviews": raw}
 
     async def sentiment_analyzer(state: AnalysisState) -> AnalysisState:
         with agent_step(db, run.id, "SentimentAnalyzer", "compute_scores") as out:
@@ -105,18 +104,56 @@ async def run_analysis_workflow(
         return {**state, "dimension_scores": scores}
 
     async def gap_detector(state: AnalysisState) -> AnalysisState:
+        scores = state["dimension_scores"]
+        target = state["target_brand"]
+
+        # 先用数据计算出实际差距，再送 LLM 做策略解读
+        target_scores = scores.get(target, {})
+        computed_weaknesses = []
+        computed_advantages = []
+        computed_gaps = []
+
+        for dim in state["dimensions"]:
+            t_data = target_scores.get(dim, {})
+            t_avg = t_data.get("avg_score", 0)
+            t_count = t_data.get("count", 0)
+            if t_count == 0:
+                continue
+            if t_data.get("neg_rate", 0) >= 0.2 or t_avg <= 3.5:
+                computed_weaknesses.append({"dimension": dim, "avg_score": t_avg, "neg_rate": t_data.get("neg_rate", 0), "count": t_count})
+            for comp in state["competitor_brands"]:
+                c_data = scores.get(comp, {}).get(dim, {})
+                c_avg = c_data.get("avg_score", 0)
+                c_count = c_data.get("count", 0)
+                if c_count == 0:
+                    continue
+                gap = round(c_avg - t_avg, 2)
+                if gap >= 0.3:
+                    computed_advantages.append({"competitor": comp, "dimension": dim, "gap": gap, "competitor_avg": c_avg, "target_avg": t_avg})
+                if t_count < 5:
+                    computed_gaps.append({"dimension": dim, "count": t_count})
+
+        has_opp = bool(computed_weaknesses or computed_advantages)
+
         with agent_step(db, run.id, "GapDetector", "detect_gaps", "llm") as out:
             result = await call_llm(db, "gap_detector", "gap_analysis",
-                                    {"dimension_scores": state["dimension_scores"],
-                                     "target_brand": state["target_brand"]}, run_id=run.id)
-            has_opp = bool(result.get("has_interception_opportunity", False))
-            out["step_summary"] = f"发现拦截机会：{'是' if has_opp else '否'}"
+                                    {"dimension_scores": scores,
+                                     "target_brand": target,
+                                     "computed_weaknesses": computed_weaknesses,
+                                     "computed_competitor_advantages": computed_advantages}, run_id=run.id)
+            # LLM 结果优先，但如果数据已经发现差距则保底开启拦截流程
+            llm_weaknesses = result.get("target_weaknesses") or computed_weaknesses
+            llm_advantages = result.get("competitor_advantages") or computed_advantages
+            llm_gaps = result.get("content_gaps") or computed_gaps
+            llm_has_opp = bool(result.get("has_interception_opportunity", has_opp))
+            out["step_summary"] = f"发现拦截机会：{'是' if llm_has_opp else '否'}，弱项 {len(llm_weaknesses)} 个，竞品优势 {len(llm_advantages)} 个"
+
         return {
             **state,
-            "target_weaknesses": result.get("target_weaknesses", []),
-            "competitor_advantages": result.get("competitor_advantages", []),
-            "content_gaps": result.get("content_gaps", []),
-            "has_interception_opportunity": has_opp,
+            "target_weaknesses": llm_weaknesses,
+            "competitor_advantages": llm_advantages,
+            "content_gaps": llm_gaps,
+            "has_interception_opportunity": llm_has_opp,
         }
 
     def route_after_gap(state: AnalysisState) -> str:
