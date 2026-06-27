@@ -9,6 +9,7 @@ from app.api.routes_memory import router as memory_router
 from app.api.routes_opportunities import router as opportunities_router
 from app.api.routes_prd import router as prd_router
 from app.api.routes_upload import router as upload_router
+from app.api.routes_scrape import router as scrape_router
 from app.core.config import get_settings
 from app.db.database import SessionLocal, init_db
 from app.db.models import Project
@@ -55,3 +56,4 @@ app.include_router(opportunities_router)
 app.include_router(prd_router)
 app.include_router(memory_router)
 app.include_router(evaluation_router)
+app.include_router(scrape_router)
