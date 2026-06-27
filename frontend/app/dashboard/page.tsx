@@ -12,12 +12,12 @@ export default function DashboardPage() {
   useEffect(() => { api.dashboard().then(setData).catch(console.error); }, []);
   if (!data) return <div>Loading workspace...</div>;
   return <div className="space-y-6">
-    <div><h1 className="text-2xl font-semibold">Dashboard</h1><p className="text-sm text-muted">从已上传并入库的数据中汇总反馈、机会点和生成质量。</p></div>
+    <div><h1 className="text-2xl font-semibold">AutoSenti 竞品分析</h1><p className="text-sm text-muted">汽车舆情竞品维度分析 — 自动化发现内容缺口与拦截策略。</p></div>
     <div className="grid grid-cols-4 gap-4">
-      <KpiCard title="总反馈数" value={data.total_feedback} icon={<Inbox size={18} />} />
-      <KpiCard title="负面反馈率" value={pct(data.negative_rate)} hint="基于 feedback_items" icon={<ShieldCheck size={18} />} />
-      <KpiCard title="高优先级机会点" value={data.high_priority_opportunities} icon={<Lightbulb size={18} />} />
-      <KpiCard title="PRD 草稿数" value={data.prd_drafts} icon={<FileText size={18} />} />
+      <KpiCard title="分析评论数" value={data.total_feedback} icon={<Inbox size={18} />} />
+      <KpiCard title="发现维度数" value={data.total_feedback} hint="基于 feedback_items" icon={<ShieldCheck size={18} />} />
+      <KpiCard title="高优先级拦截机会" value={data.high_priority_opportunities} icon={<Lightbulb size={18} />} />
+      <KpiCard title="分析报告数" value={data.prd_drafts} icon={<FileText size={18} />} />
     </div>
     <div className="grid grid-cols-3 gap-4">
       <section className="card p-4"><h2 className="font-semibold">情绪分布</h2><SentimentChart data={data.sentiment_distribution || []} /></section>
