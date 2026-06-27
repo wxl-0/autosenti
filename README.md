@@ -1,6 +1,6 @@
 # FeedBackOS
 
-面向产品经理的 Chat-first AI 需求发现工作台，用于用户反馈分析、机会点发现和 PRD 生成。
+面向产品经理的 Chat-first AI 需求发现工作台，用于用户反馈分析、机会点发现和 PRD 生成。同时内置 **AutoSenti** 竞品分析模块，通过爬取汽车之家口碑评论，自动发现内容缺口与拦截策略。
 
 FeedBackOS 支持用户在一个聊天会话中上传真实业务文件。系统会先完成文件解析、字段识别、清洗、结构化入库和向量化，再通过多 Agent workflow 分析痛点、生成机会点、撰写 PRD，并由 Reviewer 对生成结果进行质量评审。
 
@@ -23,6 +23,7 @@ FeedBackOS 支持用户在一个聊天会话中上传真实业务文件。系统
 - PRD 历史面板，支持切换、编辑、保存、导出 Markdown 和 DOCX。
 - Reviewer 面板，展示综合评分、证据覆盖、问题和建议。
 - Evaluation 面板，展示 Agent、LLM、证据、Reviewer 和上下文压缩指标。
+- **AutoSenti 竞品分析**：爬取汽车之家口碑评论，自动发现维度差距与内容拦截策略，在 `/report-studio` 页面一键生成竞品分析报告。
 - 支持真实 LLM 和 Mock LLM 双模式。
 - 没有 Redis、Milvus 或真实 API Key 时，仍可通过 fallback/mock 跑完整流程。
 
@@ -77,6 +78,8 @@ flowchart LR
 
 ## Agent Workflow
 
+### 原有 PRD 生成流水线
+
 ```mermaid
 flowchart TD
   A[用户任务] --> B[Orchestrator]
@@ -100,6 +103,22 @@ flowchart TD
 ```
 
 系统会优先选择支付相关机会点生成 PRD，而不是始终选择最高优先级机会点。
+
+### AutoSenti 竞品分析流水线
+
+```mermaid
+flowchart TD
+  A[POST /api/scrape] --> B[Orchestrator]
+  B --> C[Scraper\n爬取汽车之家口碑]
+  C --> D[DimensionDiscoverer\n发现评价维度]
+  D --> E[SentimentAnalyzer\n计算情绪评分矩阵]
+  E --> F[GapDetector\n识别内容缺口]
+  F -->|有拦截机会| G[InterceptionPlanner\n生成拦截策略]
+  F -->|无拦截机会| H[ReportCompiler\n生成 Markdown 报告]
+  G --> H
+```
+
+入口：`/report-studio` 页面，输入目标车型和竞品后一键触发。结果存入 `sentiment_alerts` 表，报告支持导出 `.md`。
 
 ## 数据处理流程
 
@@ -131,6 +150,7 @@ flowchart TD
 - `agent_runs`, `agent_steps`
 - `llm_calls`, `retrieval_logs`, `compression_logs`
 - `project_memory`, `decision_memory`, `user_preference_memory`
+- `sentiment_alerts`（AutoSenti 竞品拦截策略）
 
 ## Prompt 管理
 
@@ -153,6 +173,9 @@ backend/app/core/prompt_loader.py
 - `reviewer.yaml`
 - `compression.yaml`
 - `default.yaml`
+- `dimension_discovery.yaml`（AutoSenti：发现评价维度）
+- `gap_analysis.yaml`（AutoSenti：识别内容缺口）
+- `competitor_response.yaml`（AutoSenti：生成拦截策略）
 
 每个 prompt 文件包含元信息和 `system_prompt`：
 
@@ -288,6 +311,8 @@ feedbackos-agent/
 
 ## 测试流程
 
+### 原有 PRD 生成流程
+
 1. 启动后端和前端。
 2. 打开 `http://localhost:3000`。
 3. 上传反馈 CSV、Excel、TXT、Markdown 或 DOCX 文件。
@@ -305,3 +330,12 @@ feedbackos-agent/
 ```
 
 7. 查看 `Insight Cluster`、`PRD`、`Reviewer` 和 `Evaluation` 面板。
+
+### AutoSenti 竞品分析流程
+
+1. 启动后端和前端（需要真实 API Key，爬虫需访问汽车之家）。
+2. 打开 `http://localhost:3000/report-studio`。
+3. 目标车型填 `零跑D19`，竞品填 `理想L9,蔚来ES6,深蓝S07`。
+4. 点击「开始分析」，等待约 30-60 秒。
+5. 查看生成的竞品维度分析报告，可点击「导出 .md」下载。
+6. 历史分析记录显示在左侧 sidebar，点击可查看往期报告。
