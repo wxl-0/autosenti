@@ -84,6 +84,7 @@ class FeedbackItem(Base):
     product_module: Mapped[str | None] = mapped_column(String(80))
     issue_type: Mapped[str | None] = mapped_column(String(80))
     event_time: Mapped[str | None] = mapped_column(String(80))
+    source_url: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
@@ -281,3 +282,20 @@ class EvaluationResult(Base):
     metric_value: Mapped[float] = mapped_column(Float, default=0)
     details_json: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class SentimentAlert(Base):
+    __tablename__ = "sentiment_alerts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[str | None] = mapped_column(String(80), index=True)
+    target_brand: Mapped[str] = mapped_column(String(120))
+    competitor_brand: Mapped[str] = mapped_column(String(120))
+    dimension: Mapped[str] = mapped_column(String(120))
+    gap_type: Mapped[str] = mapped_column(String(40))   # weakness/content_gap/competitor_advantage
+    severity: Mapped[str] = mapped_column(String(20))   # high/medium/low
+    interception_angle: Mapped[str | None] = mapped_column(Text)
+    evidence_quotes: Mapped[str | None] = mapped_column(Text)  # JSON array of strings
+    content_format: Mapped[str | None] = mapped_column(String(120))
+    priority_rank: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
