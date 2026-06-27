@@ -1,5 +1,5 @@
 from app.db.database import Base
-from app.db.models import SentimentAlert, FeedbackItem
+from app.db.models import SentimentAlert
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import Session
 
@@ -24,13 +24,6 @@ def test_sentiment_alert_columns():
                 "dimension", "gap_type", "severity", "interception_angle",
                 "evidence_quotes", "content_format", "priority_rank", "created_at"}
     assert required.issubset(cols)
-
-
-def test_feedback_item_has_source_url():
-    engine = get_test_engine()
-    inspector = inspect(engine)
-    cols = {c["name"] for c in inspector.get_columns("feedback_items")}
-    assert "source_url" in cols
 
 
 def test_create_sentiment_alert():

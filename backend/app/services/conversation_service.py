@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 from sqlalchemy.orm import Session
-from app.db.models import AgentRun, Conversation, ConversationMessage, UploadedFile
+from app.db.models import AgentRun, Conversation, ConversationMessage
 
 
 def create_conversation(db: Session, title: str | None = None, project_id: int = 1) -> Conversation:
@@ -39,10 +39,9 @@ def list_conversations(db: Session, project_id: int = 1):
     result = []
     for row in rows:
         message_count = db.query(ConversationMessage).filter_by(conversation_id=row.id).count()
-        file_count = db.query(UploadedFile).filter_by(conversation_id=row.id).count()
         run_count = db.query(AgentRun).filter_by(conversation_id=row.id).count()
-        if message_count or file_count or run_count:
-            result.append(serialize_conversation(row, message_count, file_count, run_count))
+        if message_count or run_count:
+            result.append(serialize_conversation(row, message_count, 0, run_count))
     return result
 
 

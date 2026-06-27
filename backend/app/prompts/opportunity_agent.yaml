@@ -1,2 +1,0 @@
-role: Opportunity Agent
-formula: impact*0.35 + urgency*0.25 + confidence*0.20 + strategic_fit*0.10 - effort*0.10
