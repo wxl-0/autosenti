@@ -12,3 +12,5 @@ httpx>=0.27
 redis>=5.0
 pymilvus[milvus_lite]>=2.4
 PyYAML>=6.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
