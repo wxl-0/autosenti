@@ -10,6 +10,9 @@ PROMPT_FILES = {
     "review": "reviewer.yaml",
     "compression": "compression.yaml",
     "prd": "prd_writer.yaml",
+    "dimension_discovery": "dimension_discovery.yaml",
+    "gap_analysis": "gap_analysis.yaml",
+    "interception": "competitor_response.yaml",
     "default": "default.yaml",
 }
 
