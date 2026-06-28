@@ -28,6 +28,12 @@ class AnalysisState(TypedDict, total=False):
     # 拦截策略
     interception_suggestions: list[dict]
 
+    # LLM 分析输出（丰富报告用）
+    executive_summary: str
+    our_strengths: list[dict]       # [{dimension, score_gap, top_competitor, content_angle}]
+    our_gaps: list[dict]            # [{dimension, competitor, score_gap, response_angle}]
+    competitor_profiles: list[dict] # [{brand, top_strengths, top_weakness, user_perception}]
+
     # 输出
     report_markdown: str
     final_output: str

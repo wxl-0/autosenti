@@ -1,4 +1,8 @@
+import asyncio
+import json
+
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -12,7 +16,7 @@ router = APIRouter(prefix="/api/scrape", tags=["scrape"])
 class ScrapeRequest(BaseModel):
     target_brand: str
     competitor_brands: list[str]
-    max_pages: int = 3
+    max_pages: int = 5
     conversation_id: str = "legacy"
 
 
@@ -34,6 +38,51 @@ async def scrape_and_analyze(req: ScrapeRequest, db: Session = Depends(get_db)):
         "dimensions": state.get("dimensions", []),
         "total_review_count": state.get("total_review_count", 0),
     }
+
+
+@router.post("/stream")
+async def scrape_and_analyze_stream(req: ScrapeRequest, db: Session = Depends(get_db)):
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def run_pipeline():
+        try:
+            state = await run_analysis_workflow(
+                db,
+                target_brand=req.target_brand,
+                competitor_brands=req.competitor_brands,
+                max_pages=req.max_pages,
+                conversation_id=req.conversation_id,
+                progress_queue=queue,
+            )
+            await queue.put({
+                "done": True,
+                "result": {
+                    "run_id": state.get("run_id"),
+                    "report_markdown": state.get("report_markdown", ""),
+                    "final_output": state.get("final_output", ""),
+                    "interception_suggestions": state.get("interception_suggestions", []),
+                    "has_interception_opportunity": state.get("has_interception_opportunity", False),
+                    "dimensions": state.get("dimensions", []),
+                    "total_review_count": state.get("total_review_count", 0),
+                },
+            })
+        except Exception as exc:
+            await queue.put({"done": True, "error": str(exc)})
+
+    async def event_stream():
+        task = asyncio.create_task(run_pipeline())
+        while True:
+            item = await queue.get()
+            yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+            if item.get("done"):
+                break
+        await task
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 
 @router.get("/reports")

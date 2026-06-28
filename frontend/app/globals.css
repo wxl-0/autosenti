@@ -10,3 +10,21 @@ body { margin: 0; background: #f5f7fb; color: #18202f; }
 .input { @apply h-9 rounded-md border border-line bg-white px-3 text-sm outline-none focus:border-brand; }
 .badge { @apply inline-flex items-center rounded-full border border-line px-2 py-0.5 text-xs font-medium; }
 
+/* Markdown 报告渲染样式 */
+.markdown-body { font-size: 14px; line-height: 1.7; color: #18202f; }
+.markdown-body h1 { font-size: 1.4rem; font-weight: 700; margin: 0 0 0.5rem; border-bottom: 1px solid #d9dee8; padding-bottom: 0.4rem; }
+.markdown-body h2 { font-size: 1.05rem; font-weight: 700; margin: 1.6rem 0 0.6rem; }
+.markdown-body h3 { font-size: 0.95rem; font-weight: 600; margin: 1.2rem 0 0.4rem; }
+.markdown-body p { margin: 0.4rem 0; }
+.markdown-body blockquote { margin: 0.6rem 0; padding: 0.4rem 1rem; border-left: 3px solid #d1d5db; color: #6b7280; font-style: normal; }
+.markdown-body table { width: 100%; border-collapse: collapse; margin: 0.8rem 0; font-size: 13px; }
+.markdown-body th { background: #f9fafb; font-weight: 600; padding: 8px 12px; text-align: center; border: 1px solid #e5e7eb; }
+.markdown-body td { padding: 7px 12px; text-align: center; border: 1px solid #e5e7eb; }
+.markdown-body tr:nth-child(even) td { background: #fafafa; }
+.markdown-body strong { font-weight: 700; color: #18202f; }
+.markdown-body hr { border: none; border-top: 1px solid #e5e7eb; margin: 1rem 0; }
+.markdown-body em { font-style: italic; color: #6b7280; font-size: 12px; }
+.markdown-body ul, .markdown-body ol { padding-left: 1.4rem; margin: 0.4rem 0; }
+.markdown-body li { margin: 0.2rem 0; }
+
+

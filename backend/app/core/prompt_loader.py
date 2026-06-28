@@ -6,13 +6,9 @@ import yaml
 
 
 PROMPT_FILES = {
-    "feedback_classification": "feedback_analyst.yaml",
-    "review": "reviewer.yaml",
-    "compression": "compression.yaml",
-    "prd": "prd_writer.yaml",
-    "dimension_discovery": "dimension_discovery.yaml",
     "gap_analysis": "gap_analysis.yaml",
     "interception": "competitor_response.yaml",
+    "dimension_discovery": "dimension_discovery.yaml",
     "default": "default.yaml",
 }
 
@@ -40,3 +36,6 @@ def load_prompt_config(prompt_type: str) -> dict[str, Any]:
 def get_system_prompt(prompt_type: str) -> str:
     return str(load_prompt_config(prompt_type).get("system_prompt") or DEFAULT_PROMPT)
 
+
+def get_user_template(prompt_type: str) -> str | None:
+    return load_prompt_config(prompt_type).get("user_template")

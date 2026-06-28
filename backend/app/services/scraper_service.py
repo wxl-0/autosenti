@@ -30,10 +30,32 @@ import httpx
 # ---------------------------------------------------------------------------
 
 CAR_ID_MAP: dict[str, str] = {
+    # 零跑系列
     "零跑D19": "8273",
+    "零跑C10": "7382",
+    "零跑C11": "5205",
+    "零跑C16": "7674",
+    # 竞品
     "理想L9":  "6576",
+    "理想L6":  "6950",
     "蔚来ES6": "4881",
     "深蓝S07": "6817",
+    "深蓝S05": "7740",
+    "银河E5":  "7650",
+    "银河L7":  "7158",
+    "银河M9":  "7165",
+    "尚界H5":  "8205",
+    "元PLUS":  "6298",
+    "eπ008":   "7456",
+    "唐":      "4802",
+}
+
+# 每款零跑车型的默认竞品列表
+COMPETITOR_MAP: dict[str, list[str]] = {
+    "零跑D19": ["理想L9", "蔚来ES6", "深蓝S07"],
+    "零跑C10": ["银河E5", "银河L7", "深蓝S05", "尚界H5"],
+    "零跑C11": ["深蓝S05", "深蓝S07", "尚界H5", "元PLUS"],
+    "零跑C16": ["银河M9", "理想L6", "eπ008", "唐"],
 }
 
 API_URL = (
@@ -51,6 +73,8 @@ HEADERS = {
     "Accept-Language": "zh-CN,zh;q=0.9",
     "Referer": "https://k.autohome.com.cn/",
 }
+
+QUOTE_MIN_LENGTH = 20  # 引用最短字数，过滤"很好""不错"类无效评论
 
 
 # ---------------------------------------------------------------------------
@@ -112,15 +136,9 @@ def _parse_item(item: dict, brand: str) -> dict | None:
 def scrape_brand_reviews(
     brand: str,
     series_id: str,
-    max_pages: int = 3,
+    max_pages: int = 5,
 ) -> list[dict]:
-    """Fetch up to *max_pages* pages of reviews for one brand/model via API.
-
-    Returns a list of review dicts:
-        {"text": str, "rating": float, "date": str, "brand": str}
-
-    Stops early if the API returns no items or indicates no more pages.
-    """
+    """Fetch up to *max_pages* pages of reviews for one brand/model via API."""
     assert series_id != "TBD", f"series_id for {brand!r} not configured"
 
     all_reviews: list[dict] = []
@@ -174,12 +192,9 @@ def scrape_pages_for_brand(
 
 def scrape_all_brands(
     brand_series_id_map: dict[str, str],
-    max_pages: int = 3,
+    max_pages: int = 5,
 ) -> dict[str, list[dict]]:
-    """Fetch reviews for every brand in *brand_series_id_map*.
-
-    Returns ``{brand: [review_dict, ...]}`` for each brand.
-    """
+    """Fetch reviews for every brand in *brand_series_id_map*."""
     return {
         brand: scrape_brand_reviews(brand, series_id, max_pages)
         for brand, series_id in brand_series_id_map.items()

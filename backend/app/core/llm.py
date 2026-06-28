@@ -5,12 +5,22 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.prompt_loader import get_system_prompt
+from app.core.prompt_loader import get_system_prompt, get_user_template
 from app.db.models import LlmCall
 
 
 def estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
+
+
+def _render_user_content(prompt_type: str, payload: dict[str, Any]) -> str:
+    template = get_user_template(prompt_type)
+    if template:
+        try:
+            return template.format(**{k: str(v) for k, v in payload.items()})
+        except (KeyError, ValueError):
+            pass
+    return json.dumps(payload, ensure_ascii=False)
 
 
 async def _call_openai_compatible(settings, prompt_type: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -24,7 +34,7 @@ async def _call_openai_compatible(settings, prompt_type: str, payload: dict[str,
                 "model": settings.resolved_model,
                 "messages": [
                     {"role": "system", "content": get_system_prompt(prompt_type)},
-                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                    {"role": "user", "content": _render_user_content(prompt_type, payload)},
                 ],
                 "temperature": 0.2,
                 "response_format": {"type": "json_object"},
@@ -36,17 +46,23 @@ async def _call_openai_compatible(settings, prompt_type: str, payload: dict[str,
 
 
 def _mock_result(prompt_type: str, payload: dict[str, Any]) -> dict[str, Any]:
-    if prompt_type == "dimension_discovery":
-        return {"dimensions": ["空间体验", "车机系统", "续航里程", "驾驶感受", "外观设计"]}
     if prompt_type == "gap_analysis":
         return {
+            "executive_summary": "目标品牌在智能化和空间维度具备竞争优势，续航口碑存在一定隐患，建议内容策略主打前两者。",
+            "our_strengths": [{"dimension": "智能化", "score_gap": 0.5, "top_competitor": "银河E5", "content_angle": "主打车机流畅度和OTA升级频率"}],
+            "our_gaps": [{"dimension": "续航", "competitor": "深蓝S05", "score_gap": 0.4, "response_angle": "转移话题至综合用车成本"}],
             "has_interception_opportunity": True,
-            "target_weaknesses": [{"dimension": "车机系统", "neg_rate": 0.3}],
-            "competitor_advantages": [{"competitor": "理想L9", "dimension": "车机系统", "advantage": "更流畅"}],
-            "content_gaps": [{"dimension": "车机系统", "count": 5}],
+            "target_weaknesses": [{"dimension": "续航", "neg_rate": 0.25, "avg_score": 3.4}],
+            "competitor_advantages": [{"competitor": "深蓝S05", "dimension": "续航", "gap": 0.4}],
+            "content_gaps": [],
         }
     if prompt_type == "interception":
-        return {"suggestions": [{"dimension": "车机系统", "competitor": "理想L9", "interception_angle": "强调OTA升级频率", "content_format": "短视频", "priority": "high", "evidence_quotes": []}]}
+        return {
+            "competitor_profiles": [
+                {"brand": "银河E5", "top_strengths": ["外观", "性价比"], "top_weakness": "智能化", "user_perception": "外观好看价格实惠，但车机体验槽点较多"}
+            ],
+            "suggestions": [{"dimension": "智能化", "competitor": "银河E5", "interception_angle": "强调OTA升级频率", "content_format": "短视频对比", "evidence_quotes": [], "priority": "high"}],
+        }
     return {}
 
 
