@@ -19,7 +19,7 @@
 | 前端 | Next.js 14 · TypeScript · Tailwind CSS · react-markdown |
 | 后端 | FastAPI · Python 3.11 · LangGraph · SQLAlchemy |
 | 数据库 | SQLite（本地持久化） |
-| AI | OpenAI-compatible API（支持 DashScope/DeepSeek/SiliconFlow） |
+| AI | OpenAI-compatible API |
 | 爬虫 | 汽车之家口碑 JSON API（scoreList 结构化评分） |
 
 ## 系统架构
