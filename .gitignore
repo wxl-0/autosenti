@@ -15,3 +15,6 @@ backend/storage/*.db-journal
 .env
 npm-debug.log*
 frontend/tsconfig.tsbuildinfo
+
+docs/
+AGENTS.md
